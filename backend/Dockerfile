@@ -10,7 +10,10 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 sonora \
+    && mkdir -p /data/media \
+    && chown -R sonora:sonora /app /data
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
@@ -18,6 +21,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --extra dev --no-install-project
 
 COPY app ./app
+
+USER sonora
 
 EXPOSE 8000
 

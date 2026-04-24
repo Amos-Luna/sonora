@@ -29,12 +29,13 @@ services:
     build:
       context: ./backend
     env_file:
-      - .env.example
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://sonora:sonora@postgres:5432/sonora
       REDIS_URL: redis://redis:6379/0
+      PUBLIC_BASE_URL: http://localhost:${API_HOST_PORT:-8001}
     ports:
-      - "8000:8000"
+      - "${API_HOST_PORT:-8001}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,10 +49,11 @@ services:
       context: ./backend
     command: celery -A app.worker.celery_app worker --loglevel=INFO
     env_file:
-      - .env.example
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://sonora:sonora@postgres:5432/sonora
       REDIS_URL: redis://redis:6379/0
+      PUBLIC_BASE_URL: http://localhost:${API_HOST_PORT:-8001}
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,9 +66,9 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_HOST_PORT:-8001}
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_HOST_PORT:-8001}
     ports:
       - "3000:3000"
     depends_on:

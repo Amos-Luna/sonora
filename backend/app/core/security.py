@@ -2,22 +2,31 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+import bcrypt
 from fastapi import Request, status
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
+        raise AppError(
+            title="Password too long",
+            detail="Passwords must be 72 bytes or fewer.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_type="https://sonora.app/problems/password-too-long",
+        )
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def create_access_token(subject: str, settings: Settings | None = None) -> str:

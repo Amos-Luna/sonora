@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     app_env: str = "local"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    api_cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    api_cors_origins: str = "http://localhost:3000"
 
     database_url: str = "sqlite:///./sonora.db"
     redis_url: str = "redis://localhost:6379/0"
@@ -36,12 +36,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("api_cors_origins", mode="before")
-    @classmethod
-    def split_origins(cls, value: str | list[str]) -> list[str]:
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.api_cors_origins.split(",") if origin.strip()]
 
     @property
     def is_production(self) -> bool:

@@ -8,7 +8,7 @@ from yt_dlp import YoutubeDL
 from app.db.models import JobAction, JobStatus, MediaJob
 from app.db.session import SessionLocal
 from app.services.job_queue import celery_app
-from app.services.storage import allocate_output_path, public_file_url
+from app.services.storage import allocate_output_path
 
 logger = logging.getLogger(__name__)
 
@@ -39,22 +39,20 @@ def _download_with_ytdlp(job: MediaJob, audio_only: bool) -> dict[str, Any]:
     }
 
     if audio_only:
-        ydl_opts.update(
-            {
-                "format": "bestaudio/best",
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": extension,
-                        "preferredquality": str(job.options.get("bitrate", "192")),
-                    }
-                ],
-            }
-        )
+        postprocessor: dict[str, Any] = {
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": extension,
+        }
+        if extension == "mp3":
+            postprocessor["preferredquality"] = str(job.options.get("bitrate", "192"))
+        ydl_opts.update({"format": "bestaudio/best", "postprocessors": [postprocessor]})
     else:
         requested_height = job.options.get("quality", "720")
-        ydl_opts["format"] = f"bestvideo[height<={requested_height}]+bestaudio/best[height<={requested_height}]/best"
-        ydl_opts["merge_output_format"] = extension
+        ydl_opts["format"] = (
+            f"bestvideo[height<={requested_height}][ext=mp4]+bestaudio[ext=m4a]/"
+            f"best[height<={requested_height}][ext=mp4]/best[height<={requested_height}]/best"
+        )
+        ydl_opts["merge_output_format"] = "mp4"
 
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(job.source_url, download=True)
@@ -68,20 +66,7 @@ def _download_with_ytdlp(job: MediaJob, audio_only: bool) -> dict[str, Any]:
         "title": info.get("title") or job.title,
         "file_name": final_path.name,
         "file_size": final_path.stat().st_size,
-        "download_url": public_file_url(final_path),
-        "expires_in_hours": 24,
-    }
-
-
-def _analysis_stub(job: MediaJob) -> dict[str, Any]:
-    return {
-        "status": "not_available_in_mvp_runtime",
-        "action": job.action.value,
-        "message": (
-            "The API contract and queue path are implemented. Add Demucs/Whisper/librosa "
-            "model containers to enable this production pipeline."
-        ),
-        "recommended_worker": "gpu-enabled container for stems; cpu container for BPM/metadata",
+        "download_path": f"/jobs/{job.id}/download",
     }
 
 
@@ -100,7 +85,7 @@ def process_media_job(job_id: str) -> None:
             elif job.action == JobAction.audio_download:
                 result = _download_with_ytdlp(job, audio_only=True)
             else:
-                result = _analysis_stub(job)
+                raise RuntimeError(f"Unsupported job action: {job.action}")
 
             job.title = result.get("title") or job.title
             _set_job_state(db, job, JobStatus.completed, 100, result=result)

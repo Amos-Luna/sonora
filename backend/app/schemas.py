@@ -54,11 +54,6 @@ class MediaPreview(BaseModel):
 class JobAction(StrEnum):
     video_download = "video_download"
     audio_download = "audio_download"
-    lyrics = "lyrics"
-    stems = "stems"
-    music_analysis = "music_analysis"
-    beat_detection = "beat_detection"
-    metadata = "metadata"
 
 
 class JobStatus(StrEnum):
@@ -67,6 +62,10 @@ class JobStatus(StrEnum):
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"
+
+
+VIDEO_QUALITIES = {"360", "480", "720", "1080"}
+AUDIO_FORMATS = {"mp3", "wav"}
 
 
 class JobCreate(BaseModel):
@@ -79,6 +78,27 @@ class JobCreate(BaseModel):
     def validate_options_size(cls, value: dict[str, Any]) -> dict[str, Any]:
         if len(str(value)) > 4000:
             raise ValueError("Options payload is too large.")
+        return value
+
+    @field_validator("options")
+    @classmethod
+    def normalize_options(cls, value: dict[str, Any], info: Any) -> dict[str, Any]:
+        action = info.data.get("action")
+        if action == JobAction.video_download:
+            quality = str(value.get("quality", "720"))
+            if quality not in VIDEO_QUALITIES:
+                raise ValueError(
+                    f"Quality must be one of {sorted(VIDEO_QUALITIES)} for video downloads."
+                )
+            return {"format": "mp4", "quality": quality}
+        if action == JobAction.audio_download:
+            audio_format = str(value.get("format", "mp3")).lower()
+            if audio_format not in AUDIO_FORMATS:
+                raise ValueError(f"Audio format must be one of {sorted(AUDIO_FORMATS)}.")
+            normalized: dict[str, Any] = {"format": audio_format}
+            if audio_format == "mp3":
+                normalized["bitrate"] = str(value.get("bitrate", "192"))
+            return normalized
         return value
 
 

@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api import auth, health, jobs, media
 from app.core.config import get_settings
@@ -20,8 +19,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         Base.metadata.create_all(bind=engine)
+        ensure_local_storage()
     except Exception:
-        logger.exception("Failed to initialize database schema")
+        logger.exception("Failed to initialize database schema or storage")
         raise
     yield
 
@@ -37,7 +37,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.api_cors_origins,
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -48,7 +48,6 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(media.router)
     app.include_router(jobs.router)
-    app.mount("/files", StaticFiles(directory=str(ensure_local_storage())), name="files")
     return app
 
 

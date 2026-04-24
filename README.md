@@ -10,8 +10,10 @@ docker compose up --build
 ```
 
 - Frontend: `http://localhost:3000`
-- API docs: `http://localhost:8000/docs`
-- API health: `http://localhost:8000/health`
+- API docs: `http://localhost:8001/docs`
+- API health: `http://localhost:8001/health`
+
+The API runs on port `8000` inside Docker, but is published to host port `8001` by default to avoid common conflicts. Change `API_HOST_PORT` in `.env` if you need another host port.
 
 ## Local Development
 

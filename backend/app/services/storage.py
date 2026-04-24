@@ -13,9 +13,3 @@ def ensure_local_storage() -> Path:
 def allocate_output_path(extension: str) -> Path:
     safe_extension = extension.lower().lstrip(".") or "bin"
     return ensure_local_storage() / f"{uuid4()}.{safe_extension}"
-
-
-def public_file_url(path: Path) -> str:
-    settings = get_settings()
-    # Local MVP mode exposes metadata only; production should replace this with signed R2/S3 URLs.
-    return f"{str(settings.public_base_url).rstrip('/')}/files/{path.name}"
