@@ -209,6 +209,15 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Local media outputs
+sonora.db
+media-data/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
