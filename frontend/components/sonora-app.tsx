@@ -24,7 +24,7 @@ import {
   VideoQuality,
   createInvite,
   createJob,
-  downloadUrl,
+  downloadJobFile,
   listInvites,
   listJobs,
   login,
@@ -482,7 +482,7 @@ function Dashboard({
           ) : (
             <ul className="grid gap-3">
               {jobs.map((job) => (
-                <JobRow key={job.id} job={job} />
+                <JobRow key={job.id} job={job} token={token} />
               ))}
             </ul>
           )}
@@ -892,9 +892,25 @@ function formatCountdown(ms: number): string {
   return `${days}d : ${String(hours).padStart(2, "0")}h : ${String(minutes).padStart(2, "0")}m : ${String(seconds).padStart(2, "0")}s`;
 }
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({ job, token }: { job: Job; token: string }) {
   const isReady = job.status === "completed";
   const subtitle = describeJob(job);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleDownload = useCallback(async () => {
+    setDownloadError(null);
+    setDownloading(true);
+    try {
+      await downloadJobFile(job.id, token);
+    } catch (error) {
+      setDownloadError(
+        error instanceof Error ? error.message : "Could not download file."
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }, [job.id, token]);
 
   return (
     <li className="flex flex-col justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 md:flex-row md:items-center">
@@ -904,15 +920,27 @@ function JobRow({ job }: { job: Job }) {
         {job.error_message ? (
           <p className="mt-1 text-sm text-red-200">{job.error_message}</p>
         ) : null}
+        {downloadError ? (
+          <p className="mt-1 text-sm text-red-200">{downloadError}</p>
+        ) : null}
       </div>
       {isReady ? (
-        <a
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-300"
-          download
-          href={downloadUrl(job.id)}
+        <button
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={downloading}
+          onClick={handleDownload}
+          type="button"
         >
-          <Download className="h-4 w-4" /> Save file
-        </a>
+          {downloading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" /> Save file
+            </>
+          )}
+        </button>
       ) : (
         <span className="rounded-full border border-white/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
           {job.status}

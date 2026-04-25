@@ -150,6 +150,54 @@ export function downloadUrl(jobId: string) {
   return `${API_BASE_URL}/jobs/${jobId}/download`;
 }
 
+// Browser navigations cannot attach Authorization headers, and our session
+// cookie is cross-site (Vercel <-> Railway), so we trigger the download in
+// JS by fetching the file with the Bearer token, turning the response into a
+// blob, and clicking a synthetic anchor with a transient object URL.
+export async function downloadJobFile(jobId: string, token: string): Promise<void> {
+  const response = await fetch(downloadUrl(jobId), {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include"
+  });
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null);
+    throw new Error(
+      problem?.detail ?? `Download failed with status ${response.status}`
+    );
+  }
+
+  const filename = parseFilenameFromContentDisposition(
+    response.headers.get("content-disposition")
+  ) ?? `sonora-${jobId}`;
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  URL.revokeObjectURL(objectUrl);
+}
+
+function parseFilenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      // fall through to ASCII variant
+    }
+  }
+  const asciiMatch = header.match(/filename="?([^";]+)"?/i);
+  return asciiMatch ? asciiMatch[1] : null;
+}
+
 export type InviteCreateInput = {
   label?: string | null;
   expires_in_hours?: number | null;
