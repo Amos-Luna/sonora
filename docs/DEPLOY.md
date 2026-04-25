@@ -183,11 +183,18 @@ If `database` or `redis` is `error`, double-check the reference variables.
 5. **Build & Output Settings**: leave the defaults (`pnpm` is detected from
    `packageManager`).
 6. **Environment Variables** → add:
-   - `NEXT_PUBLIC_API_BASE_URL` = `https://sonora-api-production.up.railway.app`
-     (the api domain from step 2.4 — **no trailing slash**).
+   - `NEXT_PUBLIC_API_BASE_URL` = the **exact** api domain you generated in
+     step 2.4 (e.g. `https://sonora-production.up.railway.app`). **No trailing
+     slash.** Do NOT copy the placeholder from this guide — use your own
+     Railway domain.
 7. Click **Deploy**.
 
 After ~1 min you get a URL like `https://sonora-web.vercel.app`.
+
+> Heads-up: in Next.js, `NEXT_PUBLIC_*` variables are **inlined at build
+> time**. If you change the value later, you must **redeploy** (Vercel →
+> Deployments → ⋯ → Redeploy) — just saving the variable does not update the
+> already-built JS bundle.
 
 ---
 

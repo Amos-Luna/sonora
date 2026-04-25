@@ -16,6 +16,10 @@ eggs/
 .eggs/
 lib/
 lib64/
+# The Python "lib/" rule above unintentionally swallows the Next.js
+# frontend/lib/ folder (api client + session helpers). Re-include it.
+!frontend/lib/
+!frontend/lib/**
 parts/
 sdist/
 var/
