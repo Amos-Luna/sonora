@@ -189,7 +189,7 @@ If `database` or `redis` is `error`, double-check the reference variables.
      Railway domain.
 7. Click **Deploy**.
 
-After ~1 min you get a URL like `https://sonora-web.vercel.app`.
+After ~1 min you get a URL like `https://sonora-seven.vercel.app/`.
 
 > Heads-up: in Next.js, `NEXT_PUBLIC_*` variables are **inlined at build
 > time**. If you change the value later, you must **redeploy** (Vercel →
@@ -202,8 +202,8 @@ After ~1 min you get a URL like `https://sonora-web.vercel.app`.
 
 Go back to Railway → both `api` and `worker` services → **Variables**:
 
-- `FRONTEND_BASE_URL` = `https://sonora-web.vercel.app`
-- `API_CORS_ORIGINS` = `https://sonora-web.vercel.app`
+- `FRONTEND_BASE_URL` = `https://sonora-seven.vercel.app/`
+- `API_CORS_ORIGINS` = `https://sonora-seven.vercel.app/`
 
 If you also want to allow Vercel preview deployments (recommended), append them
 comma-separated, e.g.:
