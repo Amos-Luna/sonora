@@ -1,13 +1,13 @@
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, field_validator
 
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=10, max_length=128)
-    full_name: str | None = Field(default=None, max_length=120)
+class UserRoleSchema(StrEnum):
+    owner = "owner"
+    guest = "guest"
 
 
 class LoginRequest(BaseModel):
@@ -17,8 +17,9 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     id: str
-    email: EmailStr
+    email: str
     full_name: str | None
+    role: UserRoleSchema
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -114,3 +115,29 @@ class JobResponse(BaseModel):
     error_message: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class InviteCreate(BaseModel):
+    label: str | None = Field(default=None, max_length=120)
+    expires_in_hours: int | None = Field(default=None, ge=1, le=24 * 30)
+    max_uses: int | None = Field(default=None, ge=1, le=100)
+
+
+class InviteResponse(BaseModel):
+    id: str
+    label: str | None
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+    max_uses: int
+    used_count: int
+    is_active: bool
+    url: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InviteRedeemResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
