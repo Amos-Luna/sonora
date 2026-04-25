@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg curl \
+    && apt-get install -y --no-install-recommends ffmpeg curl gosu \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 sonora \
     && mkdir -p /data/media \
@@ -21,9 +21,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --extra dev --no-install-project
 
 COPY app ./app
-
-USER sonora
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8000
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
