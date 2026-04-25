@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     owner_full_name: str = "Owner"
 
     invite_default_ttl_hours: int = 24
-    invite_max_ttl_hours: int = 24 * 14
+    invite_max_ttl_hours: int = 24 * 7
     invite_default_max_uses: int = 1
     invite_redeem_per_minute: int = 20
     frontend_base_url: AnyHttpUrl | str = "http://localhost:3000"

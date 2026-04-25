@@ -6,11 +6,9 @@ import {
   Eye,
   EyeOff,
   Headphones,
-  Link as LinkIcon,
   Loader2,
   LogOut,
   Music2,
-  Plus,
   ShieldCheck,
   Trash2,
   Video as VideoIcon
@@ -494,14 +492,87 @@ function Dashboard({
   );
 }
 
+type ExpiresMode = "days" | "hours";
+
+const EXPIRES_MAX_DAYS = 7;
+const EXPIRES_MAX_HOURS = EXPIRES_MAX_DAYS * 24;
+
+function clampInt(raw: string, min: number, max: number, fallback: number) {
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+interface ExpiresOptionProps {
+  unit: string;
+  value: string;
+  max: number;
+  active: boolean;
+  onActivate: () => void;
+  onChange: (value: string) => void;
+}
+
+function ExpiresOption({
+  unit,
+  value,
+  max,
+  active,
+  onActivate,
+  onChange
+}: ExpiresOptionProps) {
+  const containerClass = active
+    ? "border-violet-400/60 bg-violet-500/10"
+    : "border-white/10 bg-white/10 opacity-60 hover:opacity-90 cursor-pointer";
+  const dotClass = active
+    ? "border-violet-300 bg-violet-400/20"
+    : "border-slate-500 bg-transparent";
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-2xl border px-4 py-3 transition ${containerClass}`}
+      onClick={() => {
+        if (!active) onActivate();
+      }}
+      role={active ? undefined : "button"}
+      tabIndex={active ? -1 : 0}
+      onKeyDown={(event) => {
+        if (!active && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onActivate();
+        }
+      }}
+    >
+      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${dotClass}`}>
+        {active ? <span className="h-1.5 w-1.5 rounded-full bg-violet-300" /> : null}
+      </span>
+      <input
+        className="w-12 bg-transparent text-sm font-semibold text-white outline-none disabled:cursor-pointer disabled:text-slate-500"
+        type="number"
+        min={1}
+        max={max}
+        value={value}
+        onFocus={onActivate}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={!active}
+      />
+      <span className="ml-auto text-xs uppercase tracking-[0.14em] text-slate-300">
+        {unit}
+      </span>
+    </div>
+  );
+}
+
 function InvitesPanel({ token }: { token: string }) {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [label, setLabel] = useState("");
+  const [expiresMode, setExpiresMode] = useState<ExpiresMode>("hours");
+  const [days, setDays] = useState("1");
   const [hours, setHours] = useState("24");
   const [maxUses, setMaxUses] = useState("1");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastCreated, setLastCreated] = useState<Invite | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const refresh = useCallback(async () => {
     try {
@@ -513,22 +584,34 @@ function InvitesPanel({ token }: { token: string }) {
 
   useEffect(() => {
     void refresh();
+    const interval = setInterval(refresh, 15000);
+    return () => clearInterval(interval);
   }, [refresh]);
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
+      const ttlHours =
+        expiresMode === "days"
+          ? clampInt(days, 1, EXPIRES_MAX_DAYS, 1) * 24
+          : clampInt(hours, 1, EXPIRES_MAX_HOURS, 24);
       const invite = await createInvite(
         {
           label: label.trim() || null,
-          expires_in_hours: Number.parseInt(hours, 10) || null,
-          max_uses: Number.parseInt(maxUses, 10) || null
+          expires_in_hours: ttlHours,
+          max_uses: clampInt(maxUses, 1, 100, 1)
         },
         token
       );
       setLastCreated(invite);
+      setCopied(false);
       setLabel("");
       await refresh();
     } catch (err) {
@@ -548,59 +631,90 @@ function InvitesPanel({ token }: { token: string }) {
     }
   }
 
+  async function handleCopy() {
+    if (!lastCreated?.url) return;
+    try {
+      await navigator.clipboard.writeText(lastCreated.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <section className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-6 backdrop-blur">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-white">Invites</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Create a single-use link to let someone you trust in. You can revoke it any
-            time.
-          </p>
-        </div>
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold text-white">Invites</h2>
+        <p className="text-sm text-slate-400">
+          Generate a short-lived link for someone you trust. You can revoke it any time
+          and see what they&apos;ve downloaded.
+        </p>
       </div>
 
       <form
-        className="mt-5 grid gap-3 rounded-3xl border border-white/10 bg-black/20 p-4 md:grid-cols-[1.2fr_0.7fr_0.7fr_auto]"
+        className="mt-5 grid gap-4 rounded-3xl border border-white/10 bg-black/20 p-5 md:grid-cols-[1.1fr_1.6fr_0.7fr_auto] md:items-end"
         onSubmit={handleCreate}
       >
-        <input
-          className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-violet-400"
-          placeholder="Label (e.g. Papá)"
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-        />
-        <input
-          className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-violet-400"
-          min={1}
-          max={336}
-          placeholder="Hours (24)"
-          type="number"
-          value={hours}
-          onChange={(event) => setHours(event.target.value)}
-        />
-        <input
-          className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-violet-400"
-          min={1}
-          max={100}
-          placeholder="Max uses (1)"
-          type="number"
-          value={maxUses}
-          onChange={(event) => setMaxUses(event.target.value)}
-        />
+        <label className="flex flex-col gap-1.5 text-xs uppercase tracking-[0.14em] text-slate-400">
+          Label
+          <input
+            className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm normal-case tracking-normal text-white outline-none focus:ring-2 focus:ring-violet-400"
+            placeholder="e.g. Papá, Mamá, Edson..."
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+          />
+        </label>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs uppercase tracking-[0.14em] text-slate-400">
+            Expires in <span className="ml-1 text-[10px] tracking-[0.12em] text-slate-500">(max {EXPIRES_MAX_DAYS} days)</span>
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <ExpiresOption
+              unit="Days"
+              value={days}
+              max={EXPIRES_MAX_DAYS}
+              active={expiresMode === "days"}
+              onActivate={() => setExpiresMode("days")}
+              onChange={setDays}
+            />
+            <ExpiresOption
+              unit="Hours"
+              value={hours}
+              max={EXPIRES_MAX_HOURS}
+              active={expiresMode === "hours"}
+              onActivate={() => setExpiresMode("hours")}
+              onChange={setHours}
+            />
+          </div>
+        </div>
+
+        <label className="flex flex-col gap-1.5 text-xs uppercase tracking-[0.14em] text-slate-400">
+          Max link uses
+          <input
+            className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm normal-case tracking-normal text-white outline-none focus:ring-2 focus:ring-violet-400"
+            min={1}
+            max={100}
+            type="number"
+            value={maxUses}
+            onChange={(event) => setMaxUses(event.target.value)}
+          />
+        </label>
+
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-60"
+          className="rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-60"
           disabled={busy}
           type="submit"
         >
-          <Plus className="h-4 w-4" /> New invite
+          {busy ? "Creating..." : "Create invite"}
         </button>
       </form>
 
       {lastCreated?.url ? (
         <div className="mt-4 rounded-2xl border border-emerald-300/30 bg-emerald-500/10 p-4">
           <p className="text-sm font-semibold text-emerald-200">
-            Share this link (shown only once):
+            Share this link — it is shown only once.
           </p>
           <div className="mt-2 flex flex-col gap-2 md:flex-row md:items-center">
             <code className="flex-1 truncate rounded-xl bg-black/30 px-3 py-2 text-xs text-emerald-100">
@@ -608,14 +722,10 @@ function InvitesPanel({ token }: { token: string }) {
             </code>
             <button
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300/30 px-3 py-2 text-xs text-emerald-100 transition hover:bg-emerald-500/20"
-              onClick={() => {
-                if (lastCreated?.url) {
-                  void navigator.clipboard.writeText(lastCreated.url);
-                }
-              }}
+              onClick={handleCopy}
               type="button"
             >
-              <Copy className="h-3.5 w-3.5" /> Copy
+              <Copy className="h-3.5 w-3.5" /> {copied ? "Copied" : "Copy link"}
             </button>
           </div>
         </div>
@@ -625,51 +735,161 @@ function InvitesPanel({ token }: { token: string }) {
         <p className="mt-4 rounded-xl bg-red-500/10 px-4 py-2 text-sm text-red-200">{error}</p>
       ) : null}
 
-      <ul className="mt-5 grid gap-3">
-        {invites.length === 0 ? (
-          <li className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-400">
-            No invites yet.
-          </li>
-        ) : (
-          invites.map((invite) => (
-            <li
-              className="flex flex-col justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 md:flex-row md:items-center"
-              key={invite.id}
-            >
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 font-semibold text-white">
-                  <LinkIcon className="h-4 w-4 text-violet-300" />
-                  {invite.label ?? "Unlabeled invite"}
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {invite.used_count}/{invite.max_uses} used - expires{" "}
-                  {new Date(invite.expires_at).toLocaleString()} -{" "}
-                  {invite.is_active ? (
-                    <span className="text-emerald-300">active</span>
-                  ) : (
-                    <span className="text-slate-500">inactive</span>
-                  )}
-                </p>
-              </div>
-              {invite.is_active ? (
-                <button
-                  className="inline-flex items-center gap-2 rounded-full border border-red-300/40 px-3 py-1.5 text-xs text-red-200 transition hover:bg-red-500/10"
-                  onClick={() => handleRevoke(invite.id)}
-                  type="button"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Revoke
-                </button>
-              ) : (
-                <span className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-400">
-                  {invite.revoked_at ? "revoked" : "exhausted"}
-                </span>
-              )}
-            </li>
-          ))
-        )}
-      </ul>
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-white/5 text-xs uppercase tracking-[0.14em] text-slate-400">
+            <tr>
+              <th className="px-4 py-3">Label</th>
+              <th className="px-4 py-3">Used</th>
+              <th className="px-4 py-3">Expires</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Time left</th>
+              <th className="px-4 py-3 text-right">Downloads</th>
+              <th className="px-4 py-3 text-right">Video</th>
+              <th className="px-4 py-3 text-right">Audio</th>
+              <th className="px-4 py-3">Last activity</th>
+              <th className="px-4 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5 text-slate-200">
+            {invites.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-center text-slate-400" colSpan={10}>
+                  No invites yet. Create one above to share access.
+                </td>
+              </tr>
+            ) : (
+              invites.map((invite) => {
+                const expiresAt = new Date(invite.expires_at).getTime();
+                const expires = new Date(invite.expires_at);
+                const last = invite.last_activity_at
+                  ? new Date(invite.last_activity_at)
+                  : null;
+                const status = computeStatus(invite, now);
+                const canRevoke = expiresAt > now && invite.revoked_at === null;
+                return (
+                  <tr className="align-top hover:bg-white/[0.03]" key={invite.id}>
+                    <td className="px-4 py-3 font-semibold text-white">
+                      {invite.label ?? (
+                        <span className="italic text-slate-400">unlabeled</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {invite.used_count}
+                      <span className="text-slate-500">/{invite.max_uses}</span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div>{expires.toLocaleDateString()}</div>
+                      <div className="text-xs text-slate-500">
+                        {expires.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={status} />
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap font-mono text-xs text-slate-200">
+                      {status === "active" ? (
+                        formatCountdown(expiresAt - now)
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium text-white">
+                      {invite.downloads_total}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="inline-flex items-center gap-1 text-slate-200">
+                        <VideoIcon className="h-3.5 w-3.5 text-violet-300" />
+                        {invite.downloads_video}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="inline-flex items-center gap-1 text-slate-200">
+                        <Headphones className="h-3.5 w-3.5 text-violet-300" />
+                        {invite.downloads_audio}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400">
+                      {last ? (
+                        <>
+                          <div>{last.toLocaleDateString()}</div>
+                          <div className="text-slate-500">
+                            {last.toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {canRevoke ? (
+                        <button
+                          aria-label="Revoke invite"
+                          className="inline-flex items-center justify-center rounded-full border border-red-300/40 p-2 text-red-200 transition hover:bg-red-500/10"
+                          onClick={() => handleRevoke(invite.id)}
+                          title="Revoke invite"
+                          type="button"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-600">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
+}
+
+type DisplayStatus = "active" | "inactive" | "revoked";
+
+function computeStatus(invite: Invite, now: number): DisplayStatus {
+  if (invite.revoked_at) return "revoked";
+  if (new Date(invite.expires_at).getTime() <= now) return "inactive";
+  return "active";
+}
+
+function StatusBadge({ status }: { status: DisplayStatus }) {
+  const style: Record<DisplayStatus, string> = {
+    active: "border-emerald-300/40 bg-emerald-500/10 text-emerald-300",
+    inactive: "border-slate-400/30 bg-slate-400/10 text-slate-300",
+    revoked: "border-red-300/40 bg-red-500/10 text-red-300"
+  };
+  const dot: Record<DisplayStatus, string> = {
+    active: "bg-emerald-400",
+    inactive: "bg-slate-400",
+    revoked: "bg-red-400"
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${style[status]}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot[status]}`} />
+      {status}
+    </span>
+  );
+}
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return "0d : 0h : 0m : 0s";
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d : ${String(hours).padStart(2, "0")}h : ${String(minutes).padStart(2, "0")}m : ${String(seconds).padStart(2, "0")}s`;
 }
 
 function JobRow({ job }: { job: Job }) {

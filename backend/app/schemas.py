@@ -123,6 +123,13 @@ class InviteCreate(BaseModel):
     max_uses: int | None = Field(default=None, ge=1, le=100)
 
 
+class InviteCondition(StrEnum):
+    active = "active"
+    revoked = "revoked"
+    expired = "expired"
+    exhausted = "exhausted"
+
+
 class InviteResponse(BaseModel):
     id: str
     label: str | None
@@ -132,6 +139,13 @@ class InviteResponse(BaseModel):
     max_uses: int
     used_count: int
     is_active: bool
+    condition: InviteCondition
+    downloads_total: int = 0
+    downloads_video: int = 0
+    downloads_audio: int = 0
+    downloads_completed: int = 0
+    downloads_failed: int = 0
+    last_activity_at: datetime | None = None
     url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

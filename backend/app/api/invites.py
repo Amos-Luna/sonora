@@ -1,9 +1,10 @@
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Mapping
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_owner
@@ -14,9 +15,10 @@ from app.core.security import (
     generate_invite_token,
     hash_invite_token,
 )
-from app.db.models import Invite, User, UserRole
+from app.db.models import Invite, JobAction, JobStatus, MediaJob, User, UserRole
 from app.db.session import get_db
 from app.schemas import (
+    InviteCondition,
     InviteCreate,
     InviteRedeemResponse,
     InviteResponse,
@@ -27,6 +29,26 @@ from app.services.rate_limit import enforce_rate_limit
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/invites", tags=["invites"])
+
+
+class _InviteStats:
+    __slots__ = ("total", "videos", "audios", "completed", "failed", "last_activity")
+
+    def __init__(
+        self,
+        total: int = 0,
+        videos: int = 0,
+        audios: int = 0,
+        completed: int = 0,
+        failed: int = 0,
+        last_activity: datetime | None = None,
+    ) -> None:
+        self.total = total
+        self.videos = videos
+        self.audios = audios
+        self.completed = completed
+        self.failed = failed
+        self.last_activity = last_activity
 
 
 def _clamp_ttl(hours: int | None, settings: Settings) -> int:
@@ -45,16 +67,29 @@ def _build_url(settings: Settings, token: str) -> str:
     return f"{base}/invite/{token}"
 
 
-def _invite_is_active(invite: Invite, now: datetime) -> bool:
+def _condition(invite: Invite, now: datetime) -> InviteCondition:
     if invite.revoked_at is not None:
-        return False
+        return InviteCondition.revoked
     if invite.expires_at <= now:
-        return False
-    return invite.used_count < invite.max_uses
+        return InviteCondition.expired
+    if invite.used_count >= invite.max_uses:
+        return InviteCondition.exhausted
+    return InviteCondition.active
 
 
-def _serialize_invite(invite: Invite, *, url: str | None = None) -> InviteResponse:
+def _invite_is_active(invite: Invite, now: datetime) -> bool:
+    return _condition(invite, now) == InviteCondition.active
+
+
+def _serialize_invite(
+    invite: Invite,
+    *,
+    url: str | None = None,
+    stats: _InviteStats | None = None,
+) -> InviteResponse:
     now = datetime.now(UTC)
+    stats = stats or _InviteStats()
+    condition = _condition(invite, now)
     return InviteResponse(
         id=invite.id,
         label=invite.label,
@@ -63,9 +98,62 @@ def _serialize_invite(invite: Invite, *, url: str | None = None) -> InviteRespon
         revoked_at=invite.revoked_at,
         max_uses=invite.max_uses,
         used_count=invite.used_count,
-        is_active=_invite_is_active(invite, now),
+        is_active=condition == InviteCondition.active,
+        condition=condition,
+        downloads_total=stats.total,
+        downloads_video=stats.videos,
+        downloads_audio=stats.audios,
+        downloads_completed=stats.completed,
+        downloads_failed=stats.failed,
+        last_activity_at=stats.last_activity,
         url=url,
     )
+
+
+def _load_stats_map(db: Session) -> Mapping[str, _InviteStats]:
+    one = 1
+    zero = 0
+    rows = db.execute(
+        select(
+            User.source_invite_id,
+            func.count(MediaJob.id),
+            func.coalesce(
+                func.sum(case((MediaJob.action == JobAction.video_download, one), else_=zero)),
+                zero,
+            ),
+            func.coalesce(
+                func.sum(case((MediaJob.action == JobAction.audio_download, one), else_=zero)),
+                zero,
+            ),
+            func.coalesce(
+                func.sum(case((MediaJob.status == JobStatus.completed, one), else_=zero)),
+                zero,
+            ),
+            func.coalesce(
+                func.sum(case((MediaJob.status == JobStatus.failed, one), else_=zero)),
+                zero,
+            ),
+            func.max(MediaJob.created_at),
+        )
+        .select_from(User)
+        .join(MediaJob, MediaJob.user_id == User.id)
+        .where(User.source_invite_id.is_not(None))
+        .group_by(User.source_invite_id)
+    ).all()
+    result: dict[str, _InviteStats] = {}
+    for row in rows:
+        invite_id = row[0]
+        if not invite_id:
+            continue
+        result[invite_id] = _InviteStats(
+            total=int(row[1] or 0),
+            videos=int(row[2] or 0),
+            audios=int(row[3] or 0),
+            completed=int(row[4] or 0),
+            failed=int(row[5] or 0),
+            last_activity=row[6],
+        )
+    return result
 
 
 @router.post("", response_model=InviteResponse, status_code=status.HTTP_201_CREATED)
@@ -96,8 +184,11 @@ def list_invites(
     _: User = Depends(require_owner),
     db: Session = Depends(get_db),
 ) -> list[InviteResponse]:
-    invites = db.scalars(select(Invite).order_by(Invite.created_at.desc()).limit(100)).all()
-    return [_serialize_invite(invite) for invite in invites]
+    stats = _load_stats_map(db)
+    invites = db.scalars(
+        select(Invite).order_by(Invite.created_at.desc()).limit(100)
+    ).all()
+    return [_serialize_invite(invite, stats=stats.get(invite.id)) for invite in invites]
 
 
 @router.delete("/{invite_id}", status_code=status.HTTP_200_OK, response_model=InviteResponse)
@@ -119,7 +210,8 @@ def revoke_invite(
         db.add(invite)
         db.commit()
         db.refresh(invite)
-    return _serialize_invite(invite)
+    stats = _load_stats_map(db).get(invite.id)
+    return _serialize_invite(invite, stats=stats)
 
 
 @router.post("/{token}/redeem", response_model=InviteRedeemResponse)
@@ -150,6 +242,7 @@ def redeem_invite(
         full_name=invite.label or "Guest",
         role=UserRole.guest,
         invited_by_id=invite.created_by_id,
+        source_invite_id=invite.id,
         invite_label=invite.label,
         is_active=True,
     )

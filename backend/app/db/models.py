@@ -46,6 +46,9 @@ class User(Base):
     invited_by_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
+    source_invite_id: Mapped[str | None] = mapped_column(
+        ForeignKey("invites.id"), nullable=True, index=True
+    )
     invite_label: Mapped[str | None] = mapped_column(String(120))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
