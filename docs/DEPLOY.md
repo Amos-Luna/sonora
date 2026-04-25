@@ -257,6 +257,7 @@ notes").
 | Symptom                                          | Likely cause / fix                                                                               |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | Railway shows "GitHub Repo not found" after import | Railway's GitHub App lacks access to this repo. Fix it at <https://github.com/settings/installations> (**Configure** on "Railway" → grant access to the repo), or from Railway: avatar → **Account Settings → Integrations → GitHub → Configure**. |
+| `'${PORT:-8000}' is not a valid integer` on boot   | Railway runs the start command as argv (no shell), so bash expansions don't work. `backend/railway.json` wraps it in `sh -c '...'` to force a shell — make sure you have the latest version of that file. |
 | api crashes with `Can't load plugin: postgresql` | `DATABASE_URL` is missing the driver. The repo normalizes this in `db/session.py`; re-deploy.    |
 | api boots but `/health/ready` says `database: error` | The api is not on the same Railway project as Postgres, or the reference variable is wrong.   |
 | Worker logs `Connection refused` on Redis        | `REDIS_URL` not set on the worker. Reference variables are per-service, not project-wide.        |
