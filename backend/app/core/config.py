@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     r2_secret_access_key: str | None = None
     r2_bucket: str | None = None
 
+    # Netscape-formatted YouTube cookies (full file contents pasted as a
+    # multi-line env var). Required so yt-dlp can bypass YouTube's data-center
+    # bot challenge ("Sign in to confirm you're not a bot.").
+    youtube_cookies: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

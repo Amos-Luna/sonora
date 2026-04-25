@@ -7,6 +7,7 @@ from yt_dlp.utils import DownloadError
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.schemas import MediaFormat, MediaPreview
+from app.services.ytdlp_config import base_ydl_opts
 
 SUPPORTED_HOSTS = {
     "youtube.com",
@@ -33,7 +34,7 @@ def build_preview(url: str) -> MediaPreview:
     validate_supported_url(url)
 
     try:
-        with YoutubeDL({"quiet": True, "skip_download": True, "noplaylist": True}) as ydl:
+        with YoutubeDL({**base_ydl_opts(), "skip_download": True}) as ydl:
             info = ydl.extract_info(url, download=False)
     except DownloadError as exc:
         raise AppError(

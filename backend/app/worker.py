@@ -9,6 +9,7 @@ from app.db.models import JobAction, JobStatus, MediaJob
 from app.db.session import SessionLocal
 from app.services.job_queue import celery_app
 from app.services.storage import allocate_output_path
+from app.services.ytdlp_config import base_ydl_opts
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,8 @@ def _download_with_ytdlp(job: MediaJob, audio_only: bool) -> dict[str, Any]:
     extension = str(job.options.get("format") or ("mp3" if audio_only else "mp4"))
     output_path = allocate_output_path(extension)
     ydl_opts: dict[str, Any] = {
+        **base_ydl_opts(),
         "outtmpl": str(output_path.with_suffix(".%(ext)s")),
-        "noplaylist": True,
-        "quiet": True,
     }
 
     if audio_only:
