@@ -5,11 +5,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, health, jobs, media
+from app.api import auth, health, invites, jobs, media
 from app.core.config import get_settings
 from app.core.errors import install_exception_handlers
 from app.db.models import Base
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
+from app.services.bootstrap import ensure_owner_user
 from app.services.storage import ensure_local_storage
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         Base.metadata.create_all(bind=engine)
         ensure_local_storage()
+        settings = get_settings()
+        with SessionLocal() as db:
+            ensure_owner_user(db, settings)
     except Exception:
-        logger.exception("Failed to initialize database schema or storage")
+        logger.exception("Failed to initialize database, storage or owner account")
         raise
     yield
 
@@ -48,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(media.router)
     app.include_router(jobs.router)
+    app.include_router(invites.router)
     return app
 
 

@@ -23,6 +23,16 @@ class Settings(BaseSettings):
     max_media_duration_seconds: int = 1800
     public_base_url: AnyHttpUrl | str = "http://localhost:8000"
 
+    owner_email: str = "owner@sonora.local"
+    owner_password: str = "change-me-on-first-boot"
+    owner_full_name: str = "Owner"
+
+    invite_default_ttl_hours: int = 24
+    invite_max_ttl_hours: int = 24 * 7
+    invite_default_max_uses: int = 1
+    invite_redeem_per_minute: int = 20
+    frontend_base_url: AnyHttpUrl | str = "http://localhost:3000"
+
     storage_backend: str = "local"
     local_storage_path: Path = Path("/tmp/sonora-media")
     r2_endpoint_url: str | None = None

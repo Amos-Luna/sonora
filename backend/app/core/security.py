@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -8,6 +10,17 @@ from jose import JWTError, jwt
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
+
+
+INVITE_TOKEN_BYTES = 32
+
+
+def generate_invite_token() -> str:
+    return secrets.token_urlsafe(INVITE_TOKEN_BYTES)
+
+
+def hash_invite_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def hash_password(password: str) -> str:
